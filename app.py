@@ -25,7 +25,7 @@ div[data-testid="stMetric"] { background: #121b30; padding: 12px; border-radius:
 """, unsafe_allow_html=True)
 
 MODES = ["AI Chat", "Live Web Search", "Latest News", "PDF Study Assistant",
-         "Coding Assistant", "Study Planner", "Quiz Generator", "CSV/Excel Analysis"]
+         "Coding Assistant", "Study Planner", "Quiz Generator", "Daily Life Organizer", "CSV/Excel Analysis"]
 
 if "messages_by_mode" not in st.session_state:
     st.session_state.messages_by_mode = {m: [] for m in MODES}
@@ -232,6 +232,88 @@ Return ONLY valid JSON array. Each item must have keys: question (string), optio
                 st.write(f"{'✅' if is_correct else '❌'} **Q{i+1}:** {'Correct' if is_correct else 'Review this answer'}")
                 st.caption(q.get("explanation", ""))
             st.metric("Score", f"{correct}/{len(quiz)}", f"{round(correct/len(quiz)*100)}%")
+
+elif mode == "Daily Life Organizer":
+    st.write("Organize today's tasks and track expenses. Download your records so you can keep them between sessions.")
+    tab_tasks, tab_expenses = st.tabs(["✅ Tasks", "💸 Expenses"])
+
+    if "daily_tasks" not in st.session_state:
+        st.session_state.daily_tasks = []
+    if "daily_expenses" not in st.session_state:
+        st.session_state.daily_expenses = []
+
+    with tab_tasks:
+        st.subheader("Task list")
+        with st.form("add_daily_task", clear_on_submit=True):
+            task_title = st.text_input("Task", placeholder="e.g. Revise Mathematical Logic")
+            task_due = st.date_input("Due date", value=date.today(), key="task_due")
+            task_priority = st.selectbox("Priority", ["High", "Medium", "Low"])
+            task_category = st.selectbox("Category", ["Study", "Work", "Personal", "Health", "Other"])
+            add_task = st.form_submit_button("Add task")
+        if add_task:
+            if task_title.strip():
+                st.session_state.daily_tasks.append({
+                    "Task": task_title.strip(), "Due date": str(task_due),
+                    "Priority": task_priority, "Category": task_category, "Done": False
+                })
+                st.success("Task added.")
+            else:
+                st.warning("Enter a task name.")
+        if st.session_state.daily_tasks:
+            task_df = pd.DataFrame(st.session_state.daily_tasks)
+            done_count = sum(bool(t["Done"]) for t in st.session_state.daily_tasks)
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total tasks", len(st.session_state.daily_tasks))
+            m2.metric("Completed", done_count)
+            m3.metric("Remaining", len(st.session_state.daily_tasks) - done_count)
+            st.caption("Tick completed tasks below. Tasks are kept for this active app session; download the CSV to save a copy.")
+            for i, task in enumerate(st.session_state.daily_tasks):
+                cols = st.columns([0.6, 4, 1.4, 1.2])
+                st.session_state.daily_tasks[i]["Done"] = cols[0].checkbox(
+                    "Done", value=bool(task["Done"]), key=f"task_done_{i}", label_visibility="collapsed")
+                cols[1].write(f"**{task['Task']}**")
+                cols[2].caption(f"{task['Priority']} priority")
+                cols[3].caption(task["Due date"])
+            export_tasks = pd.DataFrame(st.session_state.daily_tasks)
+            st.download_button("⬇️ Export tasks as CSV", export_tasks.to_csv(index=False).encode("utf-8"),
+                               "my_tasks.csv", "text/csv")
+            if st.button("Clear all tasks", key="clear_tasks"):
+                st.session_state.daily_tasks = []
+                st.rerun()
+        else:
+            st.info("Your task list is empty. Add your first task above.")
+
+    with tab_expenses:
+        st.subheader("Simple expense tracker")
+        with st.form("add_expense", clear_on_submit=True):
+            expense_name = st.text_input("Expense description", placeholder="e.g. Bus fare")
+            expense_amount = st.number_input("Amount (₹)", min_value=0.0, step=10.0, format="%.2f")
+            expense_category = st.selectbox("Expense category", ["Food", "Travel", "Education", "Shopping", "Bills", "Health", "Other"])
+            expense_date = st.date_input("Expense date", value=date.today(), key="expense_date")
+            add_expense = st.form_submit_button("Add expense")
+        if add_expense:
+            if expense_name.strip() and expense_amount > 0:
+                st.session_state.daily_expenses.append({
+                    "Date": str(expense_date), "Description": expense_name.strip(),
+                    "Category": expense_category, "Amount (INR)": round(expense_amount, 2)
+                })
+                st.success("Expense added.")
+            else:
+                st.warning("Enter a description and an amount greater than zero.")
+        if st.session_state.daily_expenses:
+            exp_df = pd.DataFrame(st.session_state.daily_expenses)
+            total = float(exp_df["Amount (INR)"].sum())
+            st.metric("Tracked expenses", f"₹{total:,.2f}")
+            st.dataframe(exp_df, use_container_width=True, hide_index=True)
+            by_category = exp_df.groupby("Category")["Amount (INR)"].sum().sort_values(ascending=False)
+            st.bar_chart(by_category)
+            st.download_button("⬇️ Export expenses as CSV", exp_df.to_csv(index=False).encode("utf-8"),
+                               "my_expenses.csv", "text/csv")
+            if st.button("Clear all expenses", key="clear_expenses"):
+                st.session_state.daily_expenses = []
+                st.rerun()
+        else:
+            st.info("No expenses recorded yet. Add one above to start tracking.")
 
 elif mode == "CSV/Excel Analysis":
     st.write("Upload a CSV or Excel file to inspect columns, missing values, summary statistics, and charts.")
