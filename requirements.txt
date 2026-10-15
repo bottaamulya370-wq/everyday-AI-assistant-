@@ -1,6 +1,7 @@
+streamlit>=1.40,<2.0
+pypdf>=5.0,<7.0
 
 
-streamlit
-google-genai
-python-dotenv
-pypdf
+
+
+
