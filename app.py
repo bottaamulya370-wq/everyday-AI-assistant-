@@ -10,6 +10,7 @@ from pypdf import PdfReader
 from config import API_KEY
 from gemini_service import answer_question, create_client
 from web_search import search_web
+from database import (add_record, delete_record, is_configured, load_records, sign_in, sign_out, sign_up, update_record)
 
 st.set_page_config(page_title="Everyday AI Assistant", page_icon="🤖", layout="wide")
 
@@ -256,23 +257,93 @@ Return ONLY valid JSON array. Each item must have keys: question (string), optio
                                "quiz_results.csv", "text/csv")
 
 elif mode == "Daily Life Organizer":
-    st.write("Organize today's tasks and track expenses. Download your records so you can keep them between sessions.")
+    st.write("Organize tasks and expenses. Connect Supabase to securely save records across sessions.")
+
+    database_ready = is_configured()
+    signed_in = bool(st.session_state.get("supabase_user_id"))
+
+    if database_ready:
+        with st.container(border=True):
+            if signed_in:
+                st.caption(f"Signed in as {st.session_state.get('supabase_user_email', 'your account')} • records are stored in your Supabase database")
+                if st.button("Sign out", key="organizer_signout"):
+                    sign_out()
+                    st.rerun()
+            else:
+                st.subheader("Sign in to save your personal records")
+                auth_tab, signup_tab = st.tabs(["Sign in", "Create account"])
+                with auth_tab:
+                    with st.form("supabase_signin"):
+                        login_email = st.text_input("Email", key="login_email")
+                        login_password = st.text_input("Password", type="password", key="login_password")
+                        login_submit = st.form_submit_button("Sign in", type="primary")
+                    if login_submit:
+                        try:
+                            sign_in(login_email, login_password)
+                            st.success("Signed in.")
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(f"Sign-in failed ({type(exc).__name__}). Check your email/password and Supabase Auth settings.")
+                with signup_tab:
+                    with st.form("supabase_signup"):
+                        new_email = st.text_input("Email address", key="signup_email")
+                        new_password = st.text_input("Password (at least 8 characters)", type="password", key="signup_password")
+                        signup_submit = st.form_submit_button("Create account")
+                    if signup_submit:
+                        if len(new_password) < 8:
+                            st.warning("Use a password with at least 8 characters.")
+                        else:
+                            try:
+                                result = sign_up(new_email, new_password)
+                                if getattr(result, "session", None):
+                                    st.success("Account created and signed in.")
+                                    st.rerun()
+                                else:
+                                    st.success("Account created. Check your email to confirm it, then sign in.")
+                            except Exception as exc:
+                                st.error(f"Account creation failed ({type(exc).__name__}). Check Supabase Auth settings.")
+        if not signed_in:
+            st.info("Your other AI tools remain available. Sign in here to use database-backed tasks and expenses.")
+            st.stop()
+    else:
+        st.warning("Database is not configured. Tasks and expenses will work in this session only. Follow the Supabase setup steps in README.md to enable persistent, private storage.")
+
     tab_tasks, tab_expenses = st.tabs(["✅ Tasks", "💸 Expenses"])
 
-    if "daily_tasks" not in st.session_state:
-        st.session_state.daily_tasks = []
-    if "daily_expenses" not in st.session_state:
-        st.session_state.daily_expenses = []
+    def _task_from_db(row):
+        return {"id": row.get("id"), "Task": row.get("title", ""),
+                "Due date": str(row.get("due_date", date.today())),
+                "Priority": row.get("priority", "Medium"),
+                "Category": row.get("category", "Other"), "Done": bool(row.get("done", False))}
 
-    with st.expander("💾 Backup and restore my records"):
-        st.caption("Download a backup before closing the app. Records currently live in the active session and may be cleared when the app restarts.")
+    def _expense_from_db(row):
+        return {"id": row.get("id"), "Date": str(row.get("expense_date", date.today())),
+                "Description": row.get("description", ""), "Category": row.get("category", "Other"),
+                "Amount (INR)": float(row.get("amount", 0))}
+
+    if database_ready:
+        try:
+            tasks = [_task_from_db(row) for row in load_records("tasks")]
+            expenses = [_expense_from_db(row) for row in load_records("expenses")]
+        except Exception as exc:
+            st.error(f"Could not load database records ({type(exc).__name__}). Check that supabase_schema.sql was run and row-level security is enabled.")
+            st.stop()
+    else:
+        if "daily_tasks" not in st.session_state:
+            st.session_state.daily_tasks = []
+        if "daily_expenses" not in st.session_state:
+            st.session_state.daily_expenses = []
+        tasks = st.session_state.daily_tasks
+        expenses = st.session_state.daily_expenses
+
+    with st.expander("💾 Backup and restore"):
         backup_payload = json.dumps({
-            "tasks": st.session_state.daily_tasks,
-            "expenses": st.session_state.daily_expenses
+            "tasks": [{k: v for k, v in t.items() if k != "id"} for t in tasks],
+            "expenses": [{k: v for k, v in e.items() if k != "id"} for e in expenses]
         }, indent=2)
         st.download_button("Download records backup (JSON)", backup_payload,
                            "everyday_ai_backup.json", "application/json")
-        restore_file = st.file_uploader("Restore a previous JSON backup", type=["json"], key="restore_daily_backup")
+        restore_file = st.file_uploader("Restore a JSON backup", type=["json"], key="restore_daily_backup")
         if restore_file is not None and st.button("Restore backup", key="restore_daily_button"):
             try:
                 restored = json.load(restore_file)
@@ -282,12 +353,25 @@ elif mode == "Daily Life Organizer":
                     raise ValueError("Backup tasks and expenses must be lists.")
                 if any(not isinstance(x, dict) for x in tasks_in + expenses_in):
                     raise ValueError("Backup records have an invalid format.")
-                st.session_state.daily_tasks = tasks_in
-                st.session_state.daily_expenses = expenses_in
-                st.success("Backup restored.")
+                if database_ready:
+                    for task in tasks_in:
+                        add_record("tasks", {"title": str(task.get("Task", task.get("title", "Restored task")))[:300],
+                                             "due_date": str(task.get("Due date", task.get("due_date", date.today()))),
+                                             "priority": task.get("Priority", task.get("priority", "Medium")),
+                                             "category": task.get("Category", task.get("category", "Other")),
+                                             "done": bool(task.get("Done", task.get("done", False)))})
+                    for expense in expenses_in:
+                        add_record("expenses", {"description": str(expense.get("Description", expense.get("description", "Restored expense")))[:300],
+                                                "category": expense.get("Category", expense.get("category", "Other")),
+                                                "amount": float(expense.get("Amount (INR)", expense.get("amount", 0))),
+                                                "expense_date": str(expense.get("Date", expense.get("expense_date", date.today())))})
+                else:
+                    st.session_state.daily_tasks = tasks_in
+                    st.session_state.daily_expenses = expenses_in
+                st.success("Backup imported. Existing database records were kept; imported records were added.")
                 st.rerun()
             except Exception as exc:
-                st.error(f"Could not restore backup: {type(exc).__name__}: {exc}")
+                st.error(f"Could not restore backup ({type(exc).__name__}). Check the JSON format and values.")
 
     with tab_tasks:
         st.subheader("Task list")
@@ -296,59 +380,85 @@ elif mode == "Daily Life Organizer":
             task_due = st.date_input("Due date", value=date.today(), key="task_due")
             task_priority = st.selectbox("Priority", ["High", "Medium", "Low"])
             task_category = st.selectbox("Category", ["Study", "Work", "Personal", "Health", "Other"])
-            add_task = st.form_submit_button("Add task")
-        if add_task:
+            add_task_submit = st.form_submit_button("Add task")
+        if add_task_submit:
             if task_title.strip():
-                st.session_state.daily_tasks.append({
-                    "Task": task_title.strip(), "Due date": str(task_due),
-                    "Priority": task_priority, "Category": task_category, "Done": False
-                })
-                st.success("Task added.")
+                record = {"title": task_title.strip()[:300], "due_date": str(task_due),
+                          "priority": task_priority, "category": task_category, "done": False}
+                try:
+                    if database_ready:
+                        add_record("tasks", record)
+                    else:
+                        st.session_state.daily_tasks.append({"Task": record["title"], "Due date": record["due_date"],
+                            "Priority": task_priority, "Category": task_category, "Done": False})
+                    st.success("Task added.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Could not save task ({type(exc).__name__}).")
             else:
                 st.warning("Enter a task name.")
-        if st.session_state.daily_tasks:
-            task_df = pd.DataFrame(st.session_state.daily_tasks)
-            done_count = sum(bool(t["Done"]) for t in st.session_state.daily_tasks)
+        if tasks:
+            done_count = sum(bool(t["Done"]) for t in tasks)
             m1, m2, m3 = st.columns(3)
-            m1.metric("Total tasks", len(st.session_state.daily_tasks))
+            m1.metric("Total tasks", len(tasks))
             m2.metric("Completed", done_count)
-            m3.metric("Remaining", len(st.session_state.daily_tasks) - done_count)
-            st.caption("Tick completed tasks below. Tasks are kept for this active app session; download the CSV to save a copy.")
-            for i, task in enumerate(st.session_state.daily_tasks):
-                cols = st.columns([0.6, 4, 1.4, 1.2])
-                st.session_state.daily_tasks[i]["Done"] = cols[0].checkbox(
-                    "Done", value=bool(task["Done"]), key=f"task_done_{i}", label_visibility="collapsed")
+            m3.metric("Remaining", len(tasks) - done_count)
+            for i, task in enumerate(tasks):
+                cols = st.columns([0.6, 4, 1.3, 1.2, 0.8])
+                is_done = cols[0].checkbox("Done", value=bool(task["Done"]), key=f"task_done_{task.get('id', i)}", label_visibility="collapsed")
                 cols[1].write(f"**{task['Task']}**")
                 cols[2].caption(f"{task['Priority']} priority")
                 cols[3].caption(task["Due date"])
-            export_tasks = pd.DataFrame(st.session_state.daily_tasks)
+                if is_done != bool(task["Done"]):
+                    try:
+                        if database_ready:
+                            update_record("tasks", task["id"], {"done": is_done})
+                        else:
+                            st.session_state.daily_tasks[i]["Done"] = is_done
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Could not update task ({type(exc).__name__}).")
+                if cols[4].button("🗑️", key=f"delete_task_{task.get('id', i)}", help="Delete task"):
+                    try:
+                        if database_ready:
+                            delete_record("tasks", task["id"])
+                        else:
+                            st.session_state.daily_tasks.pop(i)
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Could not delete task ({type(exc).__name__}).")
+            export_tasks = pd.DataFrame([{k: v for k, v in t.items() if k != "id"} for t in tasks])
             st.download_button("⬇️ Export tasks as CSV", export_tasks.to_csv(index=False).encode("utf-8"),
                                "my_tasks.csv", "text/csv")
-            if st.button("Clear all tasks", key="clear_tasks"):
-                st.session_state.daily_tasks = []
-                st.rerun()
         else:
             st.info("Your task list is empty. Add your first task above.")
 
     with tab_expenses:
-        st.subheader("Simple expense tracker")
+        st.subheader("Expense tracker")
         with st.form("add_expense", clear_on_submit=True):
             expense_name = st.text_input("Expense description", placeholder="e.g. Bus fare")
             expense_amount = st.number_input("Amount (₹)", min_value=0.0, step=10.0, format="%.2f")
             expense_category = st.selectbox("Expense category", ["Food", "Travel", "Education", "Shopping", "Bills", "Health", "Other"])
             expense_date = st.date_input("Expense date", value=date.today(), key="expense_date")
-            add_expense = st.form_submit_button("Add expense")
-        if add_expense:
+            add_expense_submit = st.form_submit_button("Add expense")
+        if add_expense_submit:
             if expense_name.strip() and expense_amount > 0:
-                st.session_state.daily_expenses.append({
-                    "Date": str(expense_date), "Description": expense_name.strip(),
-                    "Category": expense_category, "Amount (INR)": round(expense_amount, 2)
-                })
-                st.success("Expense added.")
+                record = {"description": expense_name.strip()[:300], "category": expense_category,
+                          "amount": round(expense_amount, 2), "expense_date": str(expense_date)}
+                try:
+                    if database_ready:
+                        add_record("expenses", record)
+                    else:
+                        st.session_state.daily_expenses.append({"Date": record["expense_date"], "Description": record["description"],
+                            "Category": expense_category, "Amount (INR)": record["amount"]})
+                    st.success("Expense added.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Could not save expense ({type(exc).__name__}).")
             else:
                 st.warning("Enter a description and an amount greater than zero.")
-        if st.session_state.daily_expenses:
-            exp_df = pd.DataFrame(st.session_state.daily_expenses)
+        if expenses:
+            exp_df = pd.DataFrame([{k: v for k, v in e.items() if k != "id"} for e in expenses])
             total = float(exp_df["Amount (INR)"].sum())
             st.metric("Tracked expenses", f"₹{total:,.2f}")
             st.dataframe(exp_df, use_container_width=True, hide_index=True)
@@ -357,8 +467,15 @@ elif mode == "Daily Life Organizer":
             st.download_button("⬇️ Export expenses as CSV", exp_df.to_csv(index=False).encode("utf-8"),
                                "my_expenses.csv", "text/csv")
             if st.button("Clear all expenses", key="clear_expenses"):
-                st.session_state.daily_expenses = []
-                st.rerun()
+                try:
+                    if database_ready:
+                        for expense in expenses:
+                            delete_record("expenses", expense["id"])
+                    else:
+                        st.session_state.daily_expenses = []
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Could not clear expenses ({type(exc).__name__}).")
         else:
             st.info("No expenses recorded yet. Add one above to start tracking.")
 
