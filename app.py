@@ -138,7 +138,7 @@ LIVE SEARCH RESULTS:
                     with st.spinner("Summarizing the live results with Gemini..."):
                         answer = answer_question(
                             client=client, question=prompt, language=language,
-                            style=style, pdf_text="", history=history
+                            style=style, pdf_text="", history=[]
                         )
                     st.markdown(answer)
                     st.subheader("📰 Sources")
