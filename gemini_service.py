@@ -1,4 +1,4 @@
-
+```python
 import time
 
 from google import genai
