@@ -26,7 +26,6 @@ def is_configured():
     return bool(_secret("SUPABASE_URL") and _secret("SUPABASE_ANON_KEY"))
 
 
-@st.cache_resource
 def _client():
     from supabase import create_client
     url = _secret("SUPABASE_URL")
