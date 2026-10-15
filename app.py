@@ -10,7 +10,7 @@ from pypdf import PdfReader
 from config import API_KEY
 from gemini_service import answer_question, create_client
 from web_search import search_web
-from database import (add_record, delete_record, is_configured, load_records, sign_in, sign_out, sign_up, update_record)
+from database import (add_record, delete_record, is_configured, load_records, sign_in, sign_out, sign_up, update_record, submit_feedback)
 
 st.set_page_config(page_title="Everyday AI Assistant", page_icon="🤖", layout="wide")
 
@@ -26,8 +26,10 @@ div[data-testid="stMetric"] { background: #121b30; padding: 12px; border-radius:
 </style>
 """, unsafe_allow_html=True)
 
-MODES = ["AI Chat", "Live Web Search", "Latest News", "PDF Study Assistant",
-         "Coding Assistant", "Study Planner", "Quiz Generator", "Daily Life Organizer", "CSV/Excel Analysis"]
+MODES = ["AI Chat", "Text Summarizer", "Study Assistant", "Email Drafting",
+         "Live Web Search", "Latest News", "PDF Study Assistant",
+         "Coding Assistant", "Study Planner", "Quiz Generator", "Daily Life Organizer",
+         "CSV/Excel Analysis", "User Feedback"]
 
 if "messages_by_mode" not in st.session_state:
     st.session_state.messages_by_mode = {m: [] for m in MODES}
@@ -65,7 +67,7 @@ language = st.sidebar.selectbox("Response language", ["English", "Telugu", "Hind
 style = st.sidebar.selectbox("Answer detail", ["Detailed", "Balanced", "Concise"], index=1)
 st.sidebar.divider()
 st.sidebar.caption("Keys stay in Streamlit Secrets or your local .env file. Never commit API keys to GitHub.")
-if st.sidebar.button("🗑️ Clear this tool's chat", use_container_width=True):
+if st.sidebar.button("🗑️ New chat / clear this tool", use_container_width=True):
     st.session_state.messages_by_mode[mode] = []
     st.rerun()
 
@@ -539,5 +541,105 @@ elif mode == "CSV/Excel Analysis":
                         st.markdown(ask_ai(prompt, language, style))
         except Exception as exc:
             st.error(f"Could not analyze this file: {type(exc).__name__}: {exc}")
+
+elif mode == "Text Summarizer":
+    st.write("Turn long text into a clear summary, key points, or revision notes.")
+    source_text = st.text_area("Paste text to summarize", height=260,
+                               placeholder="Paste an article, notes, a lesson, or meeting text...")
+    summary_style = st.selectbox("Summary format", [
+        "Short summary", "Detailed summary", "Bullet-point key takeaways",
+        "Exam revision notes", "Explain in simple words"])
+    if st.button("📝 Summarize text", type="primary"):
+        if len(source_text.strip()) < 30:
+            st.warning("Paste a little more text (at least 30 characters) so the summary is useful.")
+        else:
+            prompt = (f"Summarize the supplied text. Format: {summary_style}. "
+                      "Preserve important facts and caveats, do not add claims absent from the text, "
+                      "and use headings/bullets where helpful.\n\nTEXT:\n" + source_text[:30000])
+            with st.spinner("Reading and summarizing..."):
+                summary = ask_ai(prompt, language, style)
+            st.markdown(summary)
+            st.download_button("⬇️ Download summary", summary, "summary.md", "text/markdown")
+
+elif mode == "Study Assistant":
+    st.write("Learn a topic with beginner-friendly explanations, examples, practice questions, and exam notes.")
+    topic = st.text_input("Topic or question", placeholder="e.g. propositional logic, Python loops, machine learning")
+    study_goal = st.selectbox("What do you need?", [
+        "Explain from basics", "Exam-oriented notes", "Step-by-step worked example",
+        "Practice questions with answers", "Compare concepts", "Quick revision"])
+    level = st.selectbox("Your level", ["Beginner", "Intermediate", "Exam revision"])
+    extra_context = st.text_area("Syllabus, marks pattern, or specific doubts (optional)", height=100)
+    if st.button("🎓 Help me study", type="primary"):
+        if not topic.strip():
+            st.warning("Enter a topic or question first.")
+        else:
+            prompt = (f"Study task: {study_goal}\nTopic: {topic}\nLearner level: {level}\n"
+                      f"Extra context: {extra_context or 'None provided'}\n"
+                      "Teach accurately and clearly. For exam notes, organize with definitions, headings, "
+                      "examples, key points, and a concise conclusion. For practice questions, include answers "
+                      "and explanations. State uncertainty instead of inventing syllabus requirements.")
+            with st.spinner("Preparing your study help..."):
+                result = ask_ai(prompt, language, style)
+            st.markdown(result)
+            st.download_button("⬇️ Download study material", result, "study_material.md", "text/markdown")
+
+elif mode == "Email Drafting":
+    st.write("Create a polished email you can review and edit before sending.")
+    recipient = st.text_input("Who is the email for?", placeholder="e.g. project mentor, professor, recruiter")
+    purpose = st.text_input("Email purpose", placeholder="e.g. request project feedback")
+    key_points = st.text_area("Details to include", height=150,
+                              placeholder="Add the important facts, dates, and what you are requesting.")
+    tone = st.selectbox("Tone", ["Professional", "Polite and formal", "Friendly", "Concise"])
+    email_type = st.selectbox("Format", ["Email with subject", "Short email", "Follow-up email", "Thank-you email"])
+    if st.button("✉️ Draft email", type="primary"):
+        if not purpose.strip():
+            st.warning("Enter the purpose of the email.")
+        else:
+            prompt = (f"Draft a {email_type.lower()} in a {tone.lower()} tone. Recipient: {recipient or 'not specified'}. "
+                      f"Purpose: {purpose}. Details: {key_points or 'No additional details'}. "
+                      "Use a suitable subject line when requested. Do not invent names, dates, achievements, or facts; "
+                      "use clear placeholders for missing specifics. Return only the draft.")
+            with st.spinner("Drafting your email..."):
+                draft = ask_ai(prompt, language, style)
+            st.markdown(draft)
+            st.download_button("⬇️ Download email draft", draft, "email_draft.txt", "text/plain")
+
+elif mode == "User Feedback":
+    st.write("Help us test Everyday AI Assistant with 10–20 people. This short, anonymous survey does not ask for your name or email.")
+    st.caption("Please test at least one feature first. Avoid including personal or confidential information in comments.")
+    with st.form("product_feedback_form", clear_on_submit=True):
+        overall = st.slider("Overall experience", 1, 5, 4, help="1 = poor, 5 = excellent")
+        answer_quality = st.slider("Answer quality and usefulness", 1, 5, 4)
+        speed = st.slider("Response speed", 1, 5, 4)
+        usability = st.slider("Ease of use / interface", 1, 5, 4)
+        tested_feature = st.selectbox("Feature tested", [
+            "AI Chat", "Text Summarizer", "Study Assistant", "Email Drafting",
+            "PDF Study Assistant", "Coding Assistant", "Live Web Search", "Other"])
+        would_recommend = st.radio("Would you recommend it to someone?", ["Yes", "Maybe", "No"], horizontal=True)
+        comments = st.text_area("What worked well, and what should improve? (optional)", max_chars=1000)
+        feedback_submit = st.form_submit_button("Send anonymous feedback", type="primary")
+    if feedback_submit:
+        feedback_record = {
+            "overall_rating": int(overall), "answer_quality": int(answer_quality),
+            "response_speed": int(speed), "ease_of_use": int(usability),
+            "feature_tested": tested_feature, "would_recommend": would_recommend,
+            "comments": comments.strip()[:1000],
+        }
+        try:
+            submit_feedback(feedback_record)
+            st.success("Thank you! Your anonymous feedback was submitted.")
+            st.session_state.pop("pending_feedback", None)
+        except Exception as exc:
+            st.error("Feedback could not be saved to the shared database. Check that Supabase feedback storage is configured.")
+            st.caption(f"Technical detail: {type(exc).__name__}")
+            st.session_state["pending_feedback"] = feedback_record
+    pending = st.session_state.get("pending_feedback")
+    if pending:
+        st.info("Download this feedback and send it to the project owner if shared storage is not configured.")
+        st.download_button("Download feedback (CSV)",
+                           pd.DataFrame([pending]).to_csv(index=False).encode("utf-8"),
+                           "everyday_ai_feedback.csv", "text/csv")
+    st.caption("Invite 10–20 people with different experience levels. Ask each person to try one feature, then submit this form. Review submissions in Supabase.")
+
 else:
     st.info("Choose a tool from the sidebar.")
