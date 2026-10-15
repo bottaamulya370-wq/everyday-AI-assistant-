@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1020">
+  <meta name="description" content="Everyday AI Assistant — chat, research, coding, study, and PDF help in one workspace.">
+  <title>Everyday AI Assistant</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#"><span class="brand-icon">✦</span><span>Everyday <b>AI</b><small>YOUR PERSONAL WORKSPACE</small></span></a>
+      <p class="nav-label">WORKSPACE</p>
+      <button class="nav-item active" data-view="chat"><span>◉</span> AI Chat</button>
+      <button class="nav-item" data-view="search"><span>⌕</span> Web Research</button>
+      <button class="nav-item" data-view="pdf"><span>▤</span> PDF Study Assistant</button>
+      <button class="nav-item" data-view="coding"><span>⌘</span> Coding Assistant</button>
+      <button class="nav-item" data-view="planner"><span>▦</span> Study Planner</button>
+      <button class="nav-item" data-view="quiz"><span>✳</span> Quiz Generator</button>
+      <div class="sidebar-bottom"><span class="status-dot"></span><span id="api-status">Connecting to backend…</span><button id="settings-open" title="Settings" aria-label="Settings">⚙</button></div>
+    </aside>
+    <main class="main">
+      <header class="topbar"><div><span class="eyebrow">YOUR AI WORKSPACE</span><h1 id="page-title">AI Chat</h1></div><div class="top-actions"><span class="secure-label">● Private API connection</span><button id="clear-chat" class="secondary-btn">New chat</button></div></header>
+      <section class="welcome" id="welcome"><div class="welcome-orb">✦</div><p class="eyebrow">MEET YOUR EVERYDAY COPILOT</p><h2>What can I help you<br><span>make possible?</span></h2><p class="muted">Ask a question, learn something new, or turn an idea into a plan.</p>
+        <div class="suggestions"><button data-prompt="Explain machine learning in simple words with an example.">✦ Explain a concept</button><button data-prompt="Help me debug a Python program. Explain your steps.">⌘ Debug my code</button><button data-prompt="Create a 7-day study plan for AI, Python, and mathematics with 3 hours per day.">▦ Build a study plan</button></div>
+      </section>
+      <section id="conversation" class="conversation" aria-live="polite"></section>
+      <section id="search-panel" class="tool-panel hidden"><label for="search-query">What do you want to research?</label><div class="inline-field"><input id="search-query" placeholder="e.g. Recent AI developments in India"><button id="search-submit" class="primary-btn">Search sources ↗</button></div><label class="check-label"><input type="checkbox" id="news-mode"> Search recent news</label><div id="search-results"></div></section>
+      <section id="pdf-panel" class="tool-panel hidden"><h2>Ask questions about a PDF</h2><p class="muted">Upload a text-based PDF (up to 12 MB). Scanned documents need OCR.</p><label for="pdf-file">Choose PDF</label><input type="file" id="pdf-file" accept="application/pdf"><label for="pdf-question">What should I do with it?</label><textarea id="pdf-question" rows="3">Summarize this document and list key takeaways.</textarea><button id="pdf-submit" class="primary-btn">Analyze PDF ↗</button><div id="pdf-result"></div></section>
+      <section class="composer-wrap" id="composer-wrap"><div class="composer-tools"><label>Mode <select id="task-mode"><option value="chat">Ask anything</option><option value="coding">Coding help</option><option value="study_plan">Study planner</option><option value="quiz">Quiz generator</option></select></label><label>Language <select id="language"><option>English</option><option>Telugu</option><option>Hindi</option></select></label><label>Detail <select id="style"><option>Balanced</option><option>Detailed</option><option>Concise</option></select></label></div><form id="chat-form" class="composer"><textarea id="prompt" rows="1" placeholder="Message Everyday AI…" aria-label="Message Everyday AI"></textarea><button class="send-btn" type="submit" aria-label="Send message">↑</button></form><p class="disclaimer">AI can make mistakes. Verify important information. Never enter passwords or sensitive personal data.</p></section>
+    </main>
+  </div>
+  <dialog id="settings-dialog"><form method="dialog" class="dialog-head"><h2>Connect to your backend</h2><button class="icon-btn" aria-label="Close">✕</button></form><p class="muted">Enter your deployed FastAPI base URL. Locally, use <code>http://127.0.0.1:8000</code>. This setting is kept only in this browser tab.</p><label for="api-url">Backend URL</label><input id="api-url" placeholder="https://your-api.onrender.com"><div class="dialog-actions"><button type="button" id="test-api" class="secondary-btn">Test connection</button><button type="button" id="save-api" class="primary-btn">Connect</button></div><p id="settings-message" class="muted"></p></dialog>
+  <script src="app.js"></script>
+</body>
+</html>
