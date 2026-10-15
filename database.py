@@ -111,3 +111,19 @@ def delete_record(table, record_id):
     if client is None:
         raise RuntimeError("Please sign in to delete records.")
     return client.table(table).delete().eq("id", record_id).execute()
+
+def submit_feedback(record):
+    """Store anonymous product feedback using the Supabase publishable/anon key.
+
+    The product_feedback table must have an INSERT-only RLS policy for anon and
+    authenticated roles. No name, email, or account identifier is collected.
+    """
+    if not is_configured():
+        raise RuntimeError("Supabase feedback storage is not configured.")
+    allowed = {
+        "overall_rating", "answer_quality", "response_speed", "ease_of_use",
+        "feature_tested", "would_recommend", "comments"
+    }
+    safe_record = {key: value for key, value in record.items() if key in allowed}
+    response = _client().table("product_feedback").insert(safe_record).execute()
+    return response.data[0] if response.data else None
