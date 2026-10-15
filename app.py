@@ -79,7 +79,7 @@ if mode == "AI Chat":
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
     if history:
-        transcript = "\\n\\n".join(
+        transcript = "\n\n".join(
             f"{'You' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
             for m in history
         )
