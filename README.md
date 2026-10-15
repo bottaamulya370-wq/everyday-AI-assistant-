@@ -10,7 +10,7 @@ A Streamlit-based AI workspace with Gemini-powered chat, live web research, PDF 
 - **Email Drafting** — professional, polite, friendly, concise, follow-up, and thank-you email drafts.
 - **User Feedback** — anonymous 1–5 ratings for answer quality, speed, usability, and overall experience; feedback can be stored in Supabase for 10–20-person user testing.
 - **Live Web Search / Latest News** — Tavily results, AI summaries, source URLs, and available publication dates.
-- **PDF Study Assistant** — extract selectable PDF text, summarize, create exam notes, generate questions, or ask questions about the document. Scanned PDFs need OCR and are not supported directly.
+- **PDF & Document Study Assistant** — upload PDF, Word (.docx), or text (.txt) study material; ask questions, summarize, create exam notes, explain concepts simply, and generate revision questions. Uploads are limited to 15 MB and extracted text is capped at 50,000 characters. Scanned PDFs need OCR.
 - **Coding Assistant** — explanations, debugging guidance, code generation, and review.
 - **Study Planner** — build and download a study plan.
 - **Quiz Generator** — multiple-choice quizzes, explanations, scoring, and CSV export.
