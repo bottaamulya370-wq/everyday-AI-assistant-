@@ -21,7 +21,7 @@ def get_secret(name, default=""):
 API_KEY = get_secret("GEMINI_API_KEY")
 MODEL_NAME = get_secret(
     "GEMINI_MODEL",
-    "gemini-3.8-flash"
+    "gemini-3.5-flash-lite"
 )
 
 if not API_KEY:
