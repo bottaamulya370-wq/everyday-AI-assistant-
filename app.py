@@ -16,7 +16,8 @@ st.set_page_config(page_title="Everyday AI Assistant", page_icon="🤖", layout=
 st.markdown("""
 <style>
 .stApp { background: #0b1020; color: #f5f7ff; }
-.block-container { max-width: 1150px; padding-top: 1.2rem; padding-left: clamp(0.75rem, 3vw, 2rem); padding-right: clamp(0.75rem, 3vw, 2rem); }\n@media (max-width: 640px) { .block-container { padding-top: 0.6rem; } h1 { font-size: 1.7rem !important; } [data-testid="stMetric"] { padding: 8px; } }
+.block-container { max-width: 1150px; padding-top: 1.2rem; padding-left: clamp(0.75rem, 3vw, 2rem); padding-right: clamp(0.75rem, 3vw, 2rem); }
+@media (max-width: 640px) { .block-container { padding-top: 0.6rem; } h1 { font-size: 1.7rem !important; } [data-testid="stMetric"] { padding: 8px; } }
 h1, h2, h3, p, label { color: #f5f7ff; }
 [data-testid="stChatMessage"] { border: 1px solid #26324b; border-radius: 14px; padding: 12px; }
 .stButton button { border-radius: 10px; }
@@ -77,7 +78,7 @@ if mode == "AI Chat":
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
     if history:
-        transcript = "\\n\\n".join(
+        transcript = "\n\n".join(
             f"{'You' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
             for m in history
         )
