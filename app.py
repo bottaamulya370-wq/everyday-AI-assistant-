@@ -16,7 +16,7 @@ st.set_page_config(page_title="Everyday AI Assistant", page_icon="🤖", layout=
 st.markdown("""
 <style>
 .stApp { background: #0b1020; color: #f5f7ff; }
-.block-container { max-width: 1150px; padding-top: 1.6rem; }
+.block-container { max-width: 1150px; padding-top: 1.2rem; padding-left: clamp(0.75rem, 3vw, 2rem); padding-right: clamp(0.75rem, 3vw, 2rem); }\n@media (max-width: 640px) { .block-container { padding-top: 0.6rem; } h1 { font-size: 1.7rem !important; } [data-testid="stMetric"] { padding: 8px; } }
 h1, h2, h3, p, label { color: #f5f7ff; }
 [data-testid="stChatMessage"] { border: 1px solid #26324b; border-radius: 14px; padding: 12px; }
 .stButton button { border-radius: 10px; }
@@ -76,6 +76,12 @@ if mode == "AI Chat":
     for msg in history:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
+    if history:
+        transcript = "\\n\\n".join(
+            f"{'You' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
+            for m in history
+        )
+        st.download_button("⬇️ Export conversation", transcript, "chat_transcript.txt", "text/plain")
     question = st.chat_input("Ask anything...")
     if question:
         st.session_state.messages_by_mode[mode].append({"role": "user", "content": question})
@@ -187,7 +193,9 @@ elif mode == "Study Planner":
             days = max(1, (exam_date - date.today()).days)
             prompt = f"Create a realistic day-by-day study plan. Subjects: {subjects}. Target date: {exam_date}. Days available: {days}. Study hours/day: {hours}. Preferred start: {start_time}. Weak topics: {weak or 'not specified'}. Include revision, breaks, practice questions, and buffer time. Do not overfill the schedule."
             with st.spinner("Creating your plan..."):
-                st.markdown(ask_ai(prompt, language, style))
+                plan_text = ask_ai(prompt, language, style)
+            st.markdown(plan_text)
+            st.download_button("⬇️ Download study plan", plan_text, "study_plan.md", "text/markdown")
 
 elif mode == "Quiz Generator":
     st.write("Generate a practice quiz and check your answers.")
@@ -232,6 +240,19 @@ Return ONLY valid JSON array. Each item must have keys: question (string), optio
                 st.write(f"{'✅' if is_correct else '❌'} **Q{i+1}:** {'Correct' if is_correct else 'Review this answer'}")
                 st.caption(q.get("explanation", ""))
             st.metric("Score", f"{correct}/{len(quiz)}", f"{round(correct/len(quiz)*100)}%")
+            result_rows = []
+            for i, (q, pick) in enumerate(zip(quiz, picks)):
+                options = q.get("options", [])
+                idx = options.index(pick) if pick in options else -1
+                result_rows.append({
+                    "Question": q.get("question", ""),
+                    "Your answer": pick or "Not answered",
+                    "Correct answer": options[q.get("answer", 0)] if options and 0 <= q.get("answer", 0) < len(options) else "",
+                    "Correct": idx == q.get("answer"),
+                    "Explanation": q.get("explanation", "")
+                })
+            st.download_button("⬇️ Download quiz results", pd.DataFrame(result_rows).to_csv(index=False).encode("utf-8"),
+                               "quiz_results.csv", "text/csv")
 
 elif mode == "Daily Life Organizer":
     st.write("Organize today's tasks and track expenses. Download your records so you can keep them between sessions.")
@@ -241,6 +262,31 @@ elif mode == "Daily Life Organizer":
         st.session_state.daily_tasks = []
     if "daily_expenses" not in st.session_state:
         st.session_state.daily_expenses = []
+
+    with st.expander("💾 Backup and restore my records"):
+        st.caption("Download a backup before closing the app. Records currently live in the active session and may be cleared when the app restarts.")
+        backup_payload = json.dumps({
+            "tasks": st.session_state.daily_tasks,
+            "expenses": st.session_state.daily_expenses
+        }, indent=2)
+        st.download_button("Download records backup (JSON)", backup_payload,
+                           "everyday_ai_backup.json", "application/json")
+        restore_file = st.file_uploader("Restore a previous JSON backup", type=["json"], key="restore_daily_backup")
+        if restore_file is not None and st.button("Restore backup", key="restore_daily_button"):
+            try:
+                restored = json.load(restore_file)
+                tasks_in = restored.get("tasks", [])
+                expenses_in = restored.get("expenses", [])
+                if not isinstance(tasks_in, list) or not isinstance(expenses_in, list):
+                    raise ValueError("Backup tasks and expenses must be lists.")
+                if any(not isinstance(x, dict) for x in tasks_in + expenses_in):
+                    raise ValueError("Backup records have an invalid format.")
+                st.session_state.daily_tasks = tasks_in
+                st.session_state.daily_expenses = expenses_in
+                st.success("Backup restored.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Could not restore backup: {type(exc).__name__}: {exc}")
 
     with tab_tasks:
         st.subheader("Task list")
