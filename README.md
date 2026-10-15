@@ -4,7 +4,11 @@ A Streamlit-based AI workspace with Gemini-powered chat, live web research, PDF 
 
 ## Features
 
-- **AI Chat** — conversational answers, language and response-style controls, transcript export.
+- **AI Chat** — conversational answers, in-session conversation history, new-chat/reset control, regenerate, transcript export, and loading/error feedback.
+- **Text Summarizer** — summarize pasted text as short/detailed summaries, key takeaways, revision notes, or simple explanations.
+- **Study Assistant** — beginner explanations, exam notes, worked examples, practice questions, and quick revision.
+- **Email Drafting** — professional, polite, friendly, concise, follow-up, and thank-you email drafts.
+- **User Feedback** — anonymous 1–5 ratings for answer quality, speed, usability, and overall experience; feedback can be stored in Supabase for 10–20-person user testing.
 - **Live Web Search / Latest News** — Tavily results, AI summaries, source URLs, and available publication dates.
 - **PDF Study Assistant** — extract selectable PDF text, summarize, create exam notes, generate questions, or ask questions about the document. Scanned PDFs need OCR and are not supported directly.
 - **Coding Assistant** — explanations, debugging guidance, code generation, and review.
@@ -75,11 +79,19 @@ The app uses Supabase Auth and user-scoped queries. Keep RLS enabled. Never disa
 5. Save the settings and reboot the app. Streamlit should install the packages from `requirements.txt`.
 6. Check the app logs if the app does not start. A GitHub commit does not guarantee that deployment succeeded; verify the live app and logs after each major update.
 
+## Anonymous user testing (10–20 people)
+
+1. Run the updated `supabase_schema.sql` in Supabase SQL Editor so the `product_feedback` table and insert-only policy exist.
+2. Add `SUPABASE_URL` and `SUPABASE_ANON_KEY` to Streamlit App Settings → Secrets. Use only the publishable/anon key, never the service-role key.
+3. Reboot the Streamlit app and ask 10–20 testers to try at least one feature each, then open **User Feedback** and submit the anonymous survey.
+4. Review the `product_feedback` rows in Supabase Table Editor. Compare average overall rating, answer quality, speed, and ease of use; group comments by recurring issue. Do not collect names/emails or paste confidential information into feedback.
+5. If feedback storage is not configured, the app offers a CSV download as a manual fallback; that fallback does not automatically send responses to the project owner.
+
 ## Security and limitations
 
 - API keys belong in local `.env` or Streamlit Cloud Secrets, never in source code or screenshots.
 - The Supabase app uses the publishable/anon key plus row-level security; do not use the service-role key.
-- Chat history and uploaded PDF text are kept in Streamlit session state, not stored in the database.
+- Chat history and uploaded PDF text are kept in Streamlit session state, not stored in the database. Feedback submissions are stored in `product_feedback` only when Supabase is configured and the updated schema has been run.
 - PDF extraction works for selectable text; scanned documents need OCR.
 - The AI may make mistakes. Verify important academic, coding, financial, and current-event information against reliable sources.
 - CSV/Excel AI analysis sends a limited sample of the uploaded data to the selected AI provider. Do not upload sensitive or confidential data unless you are permitted to share it.
