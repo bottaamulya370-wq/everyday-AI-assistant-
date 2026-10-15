@@ -79,11 +79,27 @@ if mode == "AI Chat":
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
     if history:
-        transcript = "\n\n".join(
+        transcript = "\\n\\n".join(
             f"{'You' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
             for m in history
         )
         st.download_button("⬇️ Export conversation", transcript, "chat_transcript.txt", "text/plain")
+        last_answer = next((m["content"] for m in reversed(history) if m["role"] == "assistant"), "")
+        last_question = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
+        action_col1, action_col2 = st.columns(2)
+        if action_col1.button("🔄 Regenerate last answer", disabled=not last_question, use_container_width=True):
+            while history and history[-1]["role"] == "assistant":
+                history.pop()
+            if history and history[-1]["role"] == "user":
+                history.pop()
+            with st.spinner("Generating a new answer..."):
+                regenerated = ask_ai(last_question, language, style, st.session_state.pdf_text, history)
+            history.append({"role": "user", "content": last_question})
+            history.append({"role": "assistant", "content": regenerated})
+            st.rerun()
+        if last_answer:
+            action_col2.download_button("📋 Download last answer", last_answer, "last_answer.txt",
+                                        "text/plain", use_container_width=True)
     question = st.chat_input("Ask anything...")
     if question:
         st.session_state.messages_by_mode[mode].append({"role": "user", "content": question})
@@ -91,7 +107,7 @@ if mode == "AI Chat":
             st.markdown(question)
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                answer = ask_ai(question, language, style, st.session_state.pdf_text, history)
+                answer = ask_ai(question, language, style, st.session_state.pdf_text, history[:-1])
             st.markdown(answer)
         st.session_state.messages_by_mode[mode].append({"role": "assistant", "content": answer})
 
