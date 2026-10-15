@@ -94,3 +94,63 @@ The app uses Supabase Auth and user-scoped queries. Keep RLS enabled. Never disa
 - `supabase_schema.sql` — database tables and row-level security policies.
 - `config.py` — secrets and environment configuration.
 - `requirements.txt` — Python dependencies.
+
+## Separate HTML/CSS/JavaScript frontend + FastAPI backend
+
+The original Streamlit app remains available as `app.py`. A separate browser frontend and FastAPI API have also been added:
+
+- `frontend/index.html`, `frontend/styles.css`, `frontend/app.js` — responsive dark-mode web interface.
+- `api/main.py` — FastAPI endpoints for chat, coding/study/quiz prompts, web search/news, and PDF Q&A.
+- `render.yaml` — Render backend service template.
+- `netlify.toml` — Netlify static-site publish configuration.
+
+### Run both locally
+
+1. Install Python 3.10+ and dependencies: `pip install -r requirements.txt`.
+2. Set `GEMINI_API_KEY` in your local `.env`. Add `TAVILY_API_KEY` for search. Do not commit `.env`.
+3. From the repository root, start the backend:
+
+   ```bash
+   uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+   ```
+
+4. Open a second terminal and serve the frontend directory:
+
+   ```bash
+   python -m http.server 5500 --directory frontend
+   ```
+
+5. Open `http://127.0.0.1:5500`. The frontend calls `http://127.0.0.1:8000` by default. API documentation is at `http://127.0.0.1:8000/docs`.
+6. Use the gear icon in the frontend to set and test a deployed API URL. The URL is held only in the current browser tab.
+
+### Deploy the backend on Render
+
+1. Push this repository to GitHub (the changes are committed on `main`).
+2. In [Render](https://render.com/), choose **New → Blueprint** and select this repository. Render reads `render.yaml`.
+3. Add the secret values for `GEMINI_API_KEY` and, if needed, `TAVILY_API_KEY`. Set `FRONTEND_ORIGINS` to the exact deployed frontend origin, for example `https://your-site.netlify.app` (no trailing slash). Do not put the frontend URL in API-key fields.
+4. Deploy and check `https://YOUR-API.onrender.com/api/health` returns a JSON status response. The first request on a free service may take time while it wakes up.
+5. Confirm `https://YOUR-API.onrender.com/docs` loads the API documentation.
+
+### Deploy the frontend on Netlify
+
+1. In [Netlify](https://www.netlify.com/), import this repository and let it use `netlify.toml` (publish directory: `frontend`), or deploy the `frontend` folder as a static site.
+2. Copy the final HTTPS site origin from Netlify.
+3. In Render, set `FRONTEND_ORIGINS` to that exact origin and redeploy/restart the backend.
+4. Open the Netlify site, click the gear icon, enter the Render API base URL (for example `https://your-api.onrender.com`), then choose **Test connection** and **Connect**.
+5. Test chat, search, and PDF Q&A separately. Check browser developer tools and Render logs for failures.
+
+### API endpoints
+
+- `GET /api/health` — health check.
+- `POST /api/chat` — AI chat, coding, study planning, or quiz-style response.
+- `POST /api/search` — live web search/news and AI summary.
+- `POST /api/pdf` — text-based PDF question answering (multipart upload).
+
+### Architecture notes
+
+- Streamlit and the separate HTML/JS frontend are two frontends that share the Python AI/search services; the Streamlit app has not been removed.
+- The static frontend currently uses browser-memory chat history. Supabase-backed task/expense persistence remains in the existing Streamlit organizer and is not yet wired into the standalone frontend.
+- This API does not yet expose Supabase account/task/expense endpoints; do not assume that the standalone frontend persists personal data.
+- Never put provider API keys in HTML/JavaScript. They must remain on the backend environment.
+- CORS is restricted by `FRONTEND_ORIGINS`; set it to the actual frontend origin before production use.
+- Automated tests and a live deployment have not been run as part of this change. Verify the health endpoint and the main workflows after deployment.
