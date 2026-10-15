@@ -2,7 +2,7 @@
 import time
 
 from google import genai
-from google.genai import errors
+from google.genai import errors, types
 
 from config import API_KEY, MODEL_NAME
 
@@ -30,7 +30,7 @@ def answer_question(
     pdf_text="",
     history=None,
 ):
-    """Generate an answer using the Gemini API."""
+    """Generate an answer using Gemini and Google Search."""
 
     if not question or not question.strip():
         return "Please enter a question."
@@ -45,9 +45,7 @@ def answer_question(
         content = item.get("content", "")
 
         if content:
-            previous_messages.append(
-                f"{role}: {content}"
-            )
+            previous_messages.append(f"{role}: {content}")
 
     conversation = "\n".join(previous_messages)
 
@@ -61,13 +59,17 @@ You are Everyday AI Assistant, a helpful and accurate AI assistant.
 
 Instructions:
 - Answer the user's question directly and clearly.
-- Use simple, beginner-friendly explanations when appropriate.
-- Use examples when they help explain a concept.
+- Use simple, beginner-friendly explanations.
+- Give examples when useful.
 - Reply in this language: {language}.
 - Follow this response style: {style}.
-- If the answer is uncertain, explain the uncertainty.
-- If a PDF is provided, use its content when relevant.
-- Do not invent information that is not supported.
+- Use the uploaded PDF when relevant.
+- Do not invent facts or sources.
+- For current news, today's events, recent updates, and other
+  time-sensitive questions, use Google Search to find current
+  information when needed.
+- Clearly distinguish verified facts from uncertainty.
+- Include source links in your answer when relevant.
 
 Recent conversation:
 {conversation if conversation else "No previous conversation."}
@@ -85,6 +87,13 @@ Current user question:
             response = client.models.generate_content(
                 model=MODEL_NAME,
                 contents=prompt,
+                config=types.GenerateContentConfig(
+                    tools=[
+                        types.Tool(
+                            google_search=types.GoogleSearch()
+                        )
+                    ]
+                ),
             )
 
             answer = response.text
@@ -93,13 +102,16 @@ Current user question:
                 return answer.strip()
 
             return (
-                "Gemini returned an empty response. "
-                "Please try asking in a different way."
+                "Gemini returned an empty answer. "
+                "Please try asking again."
             )
 
         except errors.APIError as exc:
             code = getattr(exc, "code", None)
             details = str(exc)
+
+            print(f"Gemini API error code: {code}")
+            print(f"Gemini API error details: {details}")
 
             # Retry temporary server errors.
             if code in (500, 502, 503, 504) and attempt < 2:
@@ -109,30 +121,29 @@ Current user question:
             if code == 429:
                 return (
                     "Gemini API quota or rate limit reached. "
-                    "Please check your API usage and quota "
-                    "in Google AI Studio."
+                    "Check your Google AI Studio usage and quota. "
+                    "Adding Google Search does not bypass API limits."
                 )
 
             if code == 503:
                 return (
-                    "Gemini is temporarily unavailable (503). "
-                    "Please wait a little and try again."
+                    "Gemini is temporarily unavailable. "
+                    "Please try again later."
                 )
 
             if code in (400, 401, 403):
                 return (
-                    f"Gemini API error ({code}). "
+                    f"Gemini API error ({code}): {details}. "
                     "Check your API key, model name, "
-                    "and API access permissions. "
-                    f"Details: {details}"
+                    "model support for Google Search, and permissions."
                 )
 
-            return (
-                f"Gemini API error ({code}). "
-                f"Details: {details}"
-            )
+            return f"Gemini API error ({code}): {details}"
 
         except Exception as exc:
+            print(
+                f"Unexpected error: {type(exc).__name__}: {exc}"
+            )
             return (
                 f"Unexpected error: {type(exc).__name__}: {exc}"
             )
@@ -141,4 +152,3 @@ Current user question:
         "Gemini is still unavailable after several attempts. "
         "Please try again later."
     )
-
