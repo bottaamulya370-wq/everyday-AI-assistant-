@@ -5,6 +5,7 @@ from datetime import date, timedelta
 
 import pandas as pd
 import streamlit as st
+from gtts import gTTS
 from pypdf import PdfReader
 
 from config import API_KEY
@@ -26,7 +27,7 @@ div[data-testid="stMetric"] { background: #121b30; padding: 12px; border-radius:
 </style>
 """, unsafe_allow_html=True)
 
-MODES = ["AI Chat", "Text Summarizer", "Study Assistant", "Email Drafting",
+MODES = ["AI Chat", "Voice Assistant", "Text Summarizer", "Study Assistant", "Email Drafting",
          "Live Web Search", "Latest News", "PDF & Document Study Assistant",
          "Coding Assistant", "Study Planner", "Quiz Generator", "Daily Life Organizer",
          "CSV/Excel Analysis", "User Feedback"]
@@ -154,6 +155,62 @@ if mode == "AI Chat":
                 answer = ask_ai(question, language, style, st.session_state.pdf_text, history[:-1])
             st.markdown(answer)
         st.session_state.messages_by_mode[mode].append({"role": "assistant", "content": answer})
+
+elif mode == "Voice Assistant":
+    st.write("Speak naturally, get an AI answer, and listen to the response.")
+    st.info("Allow microphone access in your browser. Audio is sent to Gemini for transcription; generated speech uses Google Text-to-Speech.")
+    audio_file = st.audio_input("🎤 Record your question", sample_rate=16000)
+    if audio_file is not None:
+        st.audio(audio_file, format=audio_file.type or "audio/wav")
+        if st.button("🎙️ Transcribe and answer", type="primary"):
+            try:
+                with st.spinner("Transcribing your voice..."):
+                    client = get_gemini_client()
+                    from google.genai import types
+                    audio_part = types.Part.from_bytes(
+                        data=audio_file.getvalue(),
+                        mime_type=audio_file.type or "audio/wav",
+                    )
+                    transcription = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=[
+                            audio_part,
+                            "Transcribe the spoken words exactly. Return only the transcription, without commentary."
+                        ],
+                    )
+                    transcript = (transcription.text or "").strip()
+                if not transcript:
+                    st.warning("I couldn't recognize speech. Please record again and speak clearly.")
+                else:
+                    st.session_state.voice_transcript = transcript
+                    with st.spinner("Preparing your AI answer..."):
+                        st.session_state.voice_answer = ask_ai(transcript, language, style)
+                    st.session_state.voice_audio = None
+                    st.rerun()
+            except Exception as exc:
+                st.error(f"Voice processing failed ({type(exc).__name__}). Check your Gemini API key, model access, and microphone recording.")
+    transcript = st.session_state.get("voice_transcript", "")
+    answer = st.session_state.get("voice_answer", "")
+    if transcript:
+        st.subheader("📝 You said")
+        st.write(transcript)
+    if answer:
+        st.subheader("🤖 Assistant response")
+        st.markdown(answer)
+        if st.button("🔊 Generate spoken answer"):
+            try:
+                language_codes = {"English": "en", "Telugu": "te", "Hindi": "hi"}
+                with st.spinner("Creating audio response..."):
+                    speech = gTTS(text=answer[:4000], lang=language_codes.get(language, "en"))
+                    audio_buffer = io.BytesIO()
+                    speech.write_to_fp(audio_buffer)
+                    st.session_state.voice_audio = audio_buffer.getvalue()
+            except Exception as exc:
+                st.error(f"Speech generation failed ({type(exc).__name__}). Check the app's internet connection.")
+        spoken_audio = st.session_state.get("voice_audio")
+        if spoken_audio:
+            st.audio(spoken_audio, format="audio/mpeg")
+            st.download_button("⬇️ Download spoken answer", spoken_audio, "voice_answer.mp3", "audio/mpeg")
 
 elif mode in ("Live Web Search", "Latest News"):
     is_news = mode == "Latest News"
